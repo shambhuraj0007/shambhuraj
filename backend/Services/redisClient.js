@@ -11,7 +11,7 @@ class RedisClient {
   initializeClient() {
     try {
       // Use Redis Cloud URL if available, otherwise local Redis
-      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      const redisUrl = process.env.REDIS_URL;
       
       this.client = new Redis(redisUrl, {
         maxRetriesPerRequest: 3,

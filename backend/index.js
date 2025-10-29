@@ -13,29 +13,38 @@ require('./Models/db');
 
 const PORT = process.env.PORT || 8080;
 
-
-// Test route
-app.get('/ping', (req, res) => {
-  res.send('PONG');
-});
-
 // Body parser
 app.use(bodyParser.json());
 
-// CORS setup
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://tasks-xi-rosy.vercel.app",
-];
-
+// CORS setup - Handle dynamic Vercel preview deployments
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
+    // Allow requests with no origin (mobile apps, Postman, curl)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+    
+    // Define allowed patterns
+    const allowedOrigins = [
+      "http://localhost:5173",
+      "https://shambhuraj.vercel.app/",
+      "https://tasks-xi-rosy.vercel.app",
+      /^https:\/\/shambhuraj-[a-z0-9]+-shambhuraj0007s-projects\.vercel\.app$/,
+      /^https:\/\/.*\.vercel\.app$/ // Allow all Vercel preview deployments
+    ];
+    
+    // Check if origin matches any pattern
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') {
+        return allowed === origin;
+      }
+      // RegExp pattern
+      return allowed.test(origin);
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
     } else {
-      return callback(new Error('Not allowed by CORS'));
+      console.warn('⚠️ CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
@@ -44,26 +53,17 @@ app.use(cors({
 }));
 
 // Handle preflight requests globally
-app.options('*', cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+app.options('*', cors());
+
+// Test route
+app.get('/ping', (req, res) => {
+  res.send('PONG');
+});
 
 // Routes
 app.use('/auth', AuthRouter);
 app.use('/products', ProductRouter);
 app.use('/summaries', SummaryRouter);
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    success: false,
-    message: 'Something went wrong!',
-    error: err.message
-  });
-});
-// ... (previous code)
 
 // Comprehensive diagnostic endpoint
 app.get('/api/diagnostics', async (req, res) => {
@@ -78,7 +78,7 @@ app.get('/api/diagnostics', async (req, res) => {
     },
     database: {
       mongoUri: !!process.env.MONGO_URI,
-      connected: true // You can add actual MongoDB connection check here
+      connected: true
     },
     authentication: {
       jwtSecret: !!process.env.JWT_SECRET
@@ -93,7 +93,6 @@ app.get('/api/diagnostics', async (req, res) => {
   };
 
   console.log('\n🔍 Diagnostics requested:', JSON.stringify(diagnostics, null, 2));
-
   res.json(diagnostics);
 });
 
@@ -116,12 +115,17 @@ app.get('/api/test-ai', async (req, res) => {
   });
 });
 
-// ... (rest of the code)
-
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Something went wrong!',
+    error: err.message
+  });
+});
 
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
-  console.log(`👉 http://localhost:${process.env.JWT_SECRET}`);
 });
-
