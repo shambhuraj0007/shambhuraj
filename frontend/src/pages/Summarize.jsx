@@ -1,72 +1,200 @@
 import React, { useState } from 'react';
 import { useSummary } from '../context/SummaryContext';
-import { Sparkles, FileText, Copy, Save, Loader, AlertCircle } from 'lucide-react';
+import { Sparkles, FileText, Copy, Save, Loader, AlertCircle, Link as LinkIcon, Upload, Bug } from 'lucide-react';
 import { toast } from 'react-toastify';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
+import axios from 'axios';
 
 const Summarize = () => {
   const { generateAISummary, createSummary } = useSummary();
+  const [activeTab, setActiveTab] = useState('text'); // 'text', 'url', 'file'
+  const [debugMode, setDebugMode] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     originalText: '',
+    url: '',
     maxLength: 200,
     style: 'concise',
   });
+  const [selectedFile, setSelectedFile] = useState(null);
   const [summary, setSummary] = useState('');
   const [statistics, setStatistics] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [cached, setCached] = useState(false);
+  const [extractedText, setExtractedText] = useState('');
 
-  const wordCount = formData.originalText.trim().split(/\s+/).filter((w) => w).length;
+  const wordCount = formData.originalText?.trim().split(/\s+/).filter((w) => w).length || 0;
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        toast.error('File size must be less than 10MB');
+        return;
+      }
+      setSelectedFile(file);
+      toast.success(`File selected: ${file.name}`);
+    }
+  };
+
   const handleGenerate = async () => {
-    if (!formData.originalText.trim()) {
-      toast.error('Please enter text to summarize');
-      return;
-    }
-
-    if (wordCount < 50) {
-      toast.error('Text must be at least 50 words long');
-      return;
-    }
-
     setIsGenerating(true);
     setSummary('');
     setStatistics(null);
+    setExtractedText('');
 
-    const result = await generateAISummary({
-      text: formData.originalText,
-      maxLength: formData.maxLength,
-      style: formData.style,
-    });
+    try {
+      let result;
 
-    setIsGenerating(false);
+      if (activeTab === 'text') {
+        if (!formData.originalText?.trim()) {
+          toast.error('Please enter text to summarize');
+          setIsGenerating(false);
+          return;
+        }
+        if (wordCount < 50) {
+          toast.error('Text must be at least 50 words long');
+          setIsGenerating(false);
+          return;
+        }
+        result = await generateAISummary({
+          text: formData.originalText,
+          maxLength: formData.maxLength,
+          style: formData.style,
+        });
+      } else if (activeTab === 'url') {
+        if (!formData.url?.trim()) {
+          toast.error('Please enter a URL');
+          setIsGenerating(false);
+          return;
+        }
+        
+        // Validate URL format
+        try {
+          new URL(formData.url);
+        } catch (e) {
+          toast.error('Please enter a valid URL (e.g., https://example.com)');
+          setIsGenerating(false);
+          return;
+        }
+        
+        const token = localStorage.getItem('token');
+        const response = await axios.post(
+          `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'}/summaries/generate/url`,
+          {
+            url: formData.url,
+            maxLength: formData.maxLength,
+            style: formData.style,
+          },
+          {
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+        result = response.data;
+        if (result.extractedText) {
+          setExtractedText(result.extractedText);
+          setFormData({ ...formData, originalText: result.extractedText });
+        }
+      } else if (activeTab === 'file') {
+        if (!selectedFile) {
+          toast.error('Please select a file');
+          setIsGenerating(false);
+          return;
+        }
+        const token = localStorage.getItem('token');
+        const fileFormData = new FormData();
+        fileFormData.append('file', selectedFile);
+        fileFormData.append('maxLength', formData.maxLength);
+        fileFormData.append('style', formData.style);
+        
+        const response = await axios.post(
+          `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'}/summaries/generate/file`,
+          fileFormData,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data'
+            }
+          }
+        );
+        result = response.data;
+        if (result.extractedText) {
+          setExtractedText(result.extractedText);
+          setFormData({ ...formData, originalText: result.extractedText });
+        }
+      }
 
-    if (result.success) {
-      setSummary(result.summary);
-      setStatistics(result.statistics);
-      setCached(result.cached || false);
-      toast.success(result.cached ? 'Summary retrieved from cache!' : 'Summary generated successfully!');
-    } else {
-      toast.error(result.message || 'Failed to generate summary');
+      setIsGenerating(false);
+
+      if (result.success) {
+        setSummary(result.summary);
+        setStatistics(result.statistics);
+        setCached(result.cached || false);
+        toast.success('Summary generated successfully!');
+      } else {
+        toast.error(result.message || 'Failed to generate summary');
+      }
+    } catch (error) {
+      setIsGenerating(false);
+      console.error('Summarization error:', error);
+      
+      // Detailed error handling
+      if (error.response) {
+        const status = error.response.status;
+        const message = error.response.data?.message;
+        
+        if (status === 404) {
+          toast.error('Service not available. Please try again or contact support.');
+        } else if (status === 400) {
+          if (activeTab === 'url') {
+            toast.error(message || 'Could not extract content from URL. The page might be protected or dynamic.');
+          } else if (activeTab === 'file') {
+            toast.error(message || 'Could not extract text from file. Please ensure it contains readable text.');
+          } else {
+            toast.error(message || 'Invalid input. Please check your text.');
+          }
+        } else if (status === 401) {
+          toast.error('Session expired. Please login again.');
+          setTimeout(() => window.location.href = '/login', 2000);
+        } else if (status === 413) {
+          toast.error('File too large. Maximum size is 10MB.');
+        } else if (status >= 500) {
+          toast.error('Server error. Please try again later.');
+        } else {
+          toast.error(message || 'Failed to generate summary');
+        }
+      } else if (error.request) {
+        toast.error('Cannot connect to server. Please check your internet connection.');
+      } else {
+        toast.error('An unexpected error occurred. Please try again.');
+      }
     }
   };
 
   const handleSave = async () => {
-    if (!formData.title.trim()) {
+    if (!formData.title?.trim()) {
       toast.error('Please enter a title');
       return;
     }
 
-    if (!summary.trim()) {
+    if (!summary?.trim()) {
       toast.error('Please generate a summary first');
+      return;
+    }
+
+    // Use extractedText if available (from URL/file), otherwise use originalText
+    const textToSave = extractedText || formData.originalText;
+    
+    if (!textToSave?.trim()) {
+      toast.error('No original text available to save');
       return;
     }
 
@@ -74,7 +202,7 @@ const Summarize = () => {
 
     const result = await createSummary({
       title: formData.title,
-      originalText: formData.originalText,
+      originalText: textToSave,
       summarizedText: summary,
     });
 
@@ -84,12 +212,15 @@ const Summarize = () => {
       setFormData({
         title: '',
         originalText: '',
+        url: '',
         maxLength: 200,
         style: 'concise',
       });
       setSummary('');
       setStatistics(null);
       setCached(false);
+      setExtractedText('');
+      setSelectedFile(null);
     }
   };
 
@@ -117,8 +248,45 @@ const Summarize = () => {
             <div className="bg-white rounded-2xl shadow-xl p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <FileText className="w-6 h-6 text-indigo-600" />
-                Input Text
+                Input Source
               </h2>
+
+              {/* Tabs */}
+              <div className="flex gap-2 mb-6 border-b border-gray-200">
+                <button
+                  onClick={() => setActiveTab('text')}
+                  className={`flex items-center gap-2 px-4 py-3 font-semibold transition-all ${
+                    activeTab === 'text'
+                      ? 'text-indigo-600 border-b-2 border-indigo-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <FileText className="w-5 h-5" />
+                  Text
+                </button>
+                <button
+                  onClick={() => setActiveTab('url')}
+                  className={`flex items-center gap-2 px-4 py-3 font-semibold transition-all ${
+                    activeTab === 'url'
+                      ? 'text-indigo-600 border-b-2 border-indigo-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <LinkIcon className="w-5 h-5" />
+                  URL
+                </button>
+                <button
+                  onClick={() => setActiveTab('file')}
+                  className={`flex items-center gap-2 px-4 py-3 font-semibold transition-all ${
+                    activeTab === 'file'
+                      ? 'text-indigo-600 border-b-2 border-indigo-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Upload className="w-5 h-5" />
+                  Upload
+                </button>
+              </div>
 
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -134,28 +302,90 @@ const Summarize = () => {
                 />
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Text to Summarize *
-                </label>
-                <textarea
-                  name="originalText"
-                  value={formData.originalText}
-                  onChange={handleInputChange}
-                  placeholder="Paste your text here (minimum 50 words)..."
-                  rows="12"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none"
-                />
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-sm text-gray-600">{wordCount} words</span>
-                  {wordCount < 50 && wordCount > 0 && (
-                    <span className="text-sm text-amber-600 flex items-center gap-1">
-                      <AlertCircle className="w-4 h-4" />
-                      Minimum 50 words required
-                    </span>
-                  )}
+              {/* Text Input Tab */}
+              {activeTab === 'text' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Text to Summarize *
+                  </label>
+                  <textarea
+                    name="originalText"
+                    value={formData.originalText}
+                    onChange={handleInputChange}
+                    placeholder="Paste your text here (minimum 50 words)..."
+                    rows="12"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none"
+                  />
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-sm text-gray-600">{wordCount} words</span>
+                    {wordCount < 50 && wordCount > 0 && (
+                      <span className="text-sm text-amber-600 flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4" />
+                        Minimum 50 words required
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* URL Input Tab */}
+              {activeTab === 'url' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Article URL *
+                  </label>
+                  <input
+                    type="url"
+                    name="url"
+                    value={formData.url}
+                    onChange={handleInputChange}
+                    placeholder="https://en.wikipedia.org/wiki/..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                  <p className="text-sm text-gray-500 mt-2">
+                    Enter a URL to any article (Wikipedia, news sites, blogs, etc.)
+                  </p>
+                </div>
+              )}
+
+              {/* File Upload Tab */}
+              {activeTab === 'file' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Upload Document *
+                  </label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-500 transition-all">
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <input
+                      type="file"
+                      onChange={handleFileChange}
+                      accept=".pdf,.docx,.doc,.txt"
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <label
+                      htmlFor="file-upload"
+                      className="cursor-pointer text-indigo-600 hover:text-indigo-700 font-semibold"
+                    >
+                      Click to upload
+                    </label>
+                    <span className="text-gray-600"> or drag and drop</span>
+                    <p className="text-sm text-gray-500 mt-2">
+                      PDF, DOCX, or TXT (max 10MB)
+                    </p>
+                    {selectedFile && (
+                      <div className="mt-4 p-3 bg-indigo-50 rounded-lg">
+                        <p className="text-sm font-semibold text-indigo-700">
+                          Selected: {selectedFile.name}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {(selectedFile.size / 1024).toFixed(2)} KB
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
@@ -192,7 +422,12 @@ const Summarize = () => {
 
               <button
                 onClick={handleGenerate}
-                disabled={isGenerating || wordCount < 50}
+                disabled={
+                  isGenerating ||
+                  (activeTab === 'text' && wordCount < 50) ||
+                  (activeTab === 'url' && !formData.url?.trim()) ||
+                  (activeTab === 'file' && !selectedFile)
+                }
                 className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 rounded-lg font-semibold text-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
               >
                 {isGenerating ? (
@@ -282,7 +517,7 @@ const Summarize = () => {
                     </button>
                     <button
                       onClick={handleSave}
-                      disabled={isSaving || !formData.title.trim()}
+                      disabled={isSaving || !formData.title?.trim()}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold"
                     >
                       {isSaving ? (
@@ -303,6 +538,57 @@ const Summarize = () => {
             </div>
           </div>
         </div>
+        
+        {/* Debug toggle button */}
+        <button
+          onClick={() => setDebugMode(!debugMode)}
+          className="fixed bottom-4 right-4 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-all z-50"
+          title="Toggle debug mode"
+        >
+          <Bug className="w-5 h-5" />
+        </button>
+
+        {/* Debug panel */}
+        {debugMode && (
+          <div className="fixed bottom-20 right-4 bg-white p-4 rounded-lg shadow-2xl max-w-md max-h-96 overflow-auto text-xs border-2 border-gray-300 z-50">
+            <h3 className="font-bold mb-2 text-sm">🐛 Debug Info</h3>
+            <div className="space-y-2">
+              <div>
+                <strong>Active Tab:</strong> {activeTab}
+              </div>
+              <div>
+                <strong>Form Data:</strong>
+                <pre className="bg-gray-100 p-2 rounded mt-1 overflow-x-auto">
+                  {JSON.stringify(formData, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <strong>Summary Length:</strong> {summary?.length || 0} chars
+              </div>
+              <div>
+                <strong>Extracted Text:</strong> {extractedText?.length || 0} chars
+              </div>
+              <div>
+                <strong>Statistics:</strong>
+                <pre className="bg-gray-100 p-2 rounded mt-1">
+                  {JSON.stringify(statistics, null, 2)}
+                </pre>
+              </div>
+              {selectedFile && (
+                <div>
+                  <strong>Selected File:</strong>
+                  <pre className="bg-gray-100 p-2 rounded mt-1">
+                    {JSON.stringify({
+                      name: selectedFile.name,
+                      size: `${(selectedFile.size / 1024).toFixed(2)} KB`,
+                      type: selectedFile.type
+                    }, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <Footer />
     </>

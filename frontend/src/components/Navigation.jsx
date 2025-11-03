@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Home, Sparkles, History, LogOut, Menu, X } from 'lucide-react';
+import { Home, Sparkles, History, LogOut, Menu, X, Info } from 'lucide-react';
 
 const Navigation = () => {
   const { user, logout } = useAuth();
@@ -12,6 +12,7 @@ const Navigation = () => {
     { path: '/home', label: 'Dashboard', icon: Home },
     { path: '/summarize', label: 'Summarize', icon: Sparkles },
     { path: '/history', label: 'History', icon: History },
+    { path: '/about', label: 'About', icon: Info },
   ];
 
   const isActive = (path) => location.pathname === path;

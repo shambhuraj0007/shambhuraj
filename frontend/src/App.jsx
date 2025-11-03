@@ -7,6 +7,7 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Summarize from './pages/Summarize';
 import History from './pages/History';
+import About from './pages/About';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { SummaryProvider } from './context/SummaryContext';
@@ -52,6 +53,7 @@ function App() {
                 </ProtectedRoute>
               } 
             />
+            <Route path='/about' element={<About />} />
           </Routes>
           <ToastContainer
             position="top-right"

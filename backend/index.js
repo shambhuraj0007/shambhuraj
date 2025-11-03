@@ -13,8 +13,9 @@ require('./Models/db');
 
 const PORT = process.env.PORT || 8080;
 
-// Body parser
-app.use(bodyParser.json());
+// Body parser with increased limit for large extracted text
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // CORS setup - Handle dynamic Vercel preview deployments
 app.use(cors({
@@ -49,7 +50,9 @@ app.use(cors({
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Length", "X-Request-Id"],
+  maxAge: 86400 // 24 hours
 }));
 
 // Handle preflight requests globally
