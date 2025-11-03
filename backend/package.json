@@ -7,7 +7,7 @@
     "start": "node index.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "18.x || 20.x"
   },
   "keywords": [],
   "author": "",
@@ -18,7 +18,7 @@
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.2",
     "bullmq": "^5.1.0",
-    "cheerio": "^1.1.2",
+    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^16.0.3",
