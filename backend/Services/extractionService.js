@@ -1,7 +1,5 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const pdfParse = require('pdf-parse');
-const mammoth = require('mammoth');
 
 // Extract text from URL
 const extractTextFromURL = async (url) => {
@@ -115,113 +113,6 @@ const extractTextFromURL = async (url) => {
   }
 };
 
-// Extract text from PDF buffer
-const extractTextFromPDF = async (buffer) => {
-  try {
-    console.log('📄 Extracting text from PDF...');
-    const data = await pdfParse(buffer);
-    
-    if (!data.text || data.text.length < 50) {
-      return {
-        success: false,
-        error: 'PDF appears to be empty or contains only images'
-      };
-    }
-    
-    console.log(`✅ Extracted ${data.text.length} characters from PDF`);
-    
-    return {
-      success: true,
-      text: data.text.trim(),
-      pages: data.numpages
-    };
-    
-  } catch (error) {
-    console.error('❌ PDF extraction error:', error.message);
-    return {
-      success: false,
-      error: `Failed to extract text from PDF: ${error.message}`
-    };
-  }
-};
-
-// Extract text from DOCX buffer
-const extractTextFromDOCX = async (buffer) => {
-  try {
-    console.log('📝 Extracting text from DOCX...');
-    const result = await mammoth.extractRawText({ buffer });
-    
-    if (!result.value || result.value.length < 50) {
-      return {
-        success: false,
-        error: 'DOCX appears to be empty'
-      };
-    }
-    
-    console.log(`✅ Extracted ${result.value.length} characters from DOCX`);
-    
-    return {
-      success: true,
-      text: result.value.trim()
-    };
-    
-  } catch (error) {
-    console.error('❌ DOCX extraction error:', error.message);
-    return {
-      success: false,
-      error: `Failed to extract text from DOCX: ${error.message}`
-    };
-  }
-};
-
-// Extract text from TXT buffer
-const extractTextFromTXT = async (buffer) => {
-  try {
-    const text = buffer.toString('utf-8').trim();
-    
-    if (!text || text.length < 50) {
-      return {
-        success: false,
-        error: 'Text file appears to be empty'
-      };
-    }
-    
-    return {
-      success: true,
-      text: text
-    };
-    
-  } catch (error) {
-    return {
-      success: false,
-      error: `Failed to read text file: ${error.message}`
-    };
-  }
-};
-
-// Main extraction function
-const extractText = async (source, type) => {
-  switch (type) {
-    case 'url':
-      return await extractTextFromURL(source);
-    case 'pdf':
-      return await extractTextFromPDF(source);
-    case 'docx':
-      return await extractTextFromDOCX(source);
-    case 'txt':
-      return await extractTextFromTXT(source);
-    default:
-      return {
-        success: false,
-        error: 'Unsupported extraction type'
-      };
-  }
-};
-
 module.exports = {
-  extractText,
-  extractTextFromURL,
-  extractTextFromPDF,
-  extractTextFromDOCX,
-  extractTextFromTXT
+  extractTextFromURL
 };

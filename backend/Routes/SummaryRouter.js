@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
 const ensureAuthenticated = require('../Middlewares/Auth');
 const {
   generateAISummary,
@@ -13,25 +12,8 @@ const {
   queueSummarization,
   getJobStatus,
   getQueueStats,
-  summarizeFromURL,
-  summarizeFromFile
+  summarizeFromURL
 } = require('../Controllers/SummaryController');
-
-// Configure multer for file uploads (memory storage)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, DOCX, and TXT files are allowed.'));
-    }
-  }
-});
 
 // Test route (no auth required for debugging)
 router.get('/test', (req, res) => {
@@ -41,7 +23,6 @@ router.get('/test', (req, res) => {
     availableRoutes: [
       'POST /summaries/generate',
       'POST /summaries/generate/url',
-      'POST /summaries/generate/file',
       'POST /summaries/queue',
       'GET /summaries/job/:jobId',
       'GET /summaries',
@@ -58,7 +39,6 @@ router.use(ensureAuthenticated);
 
 // AI summarization routes (specific routes MUST come before generic ones)
 router.post('/generate/url', summarizeFromURL);     // Summarize from URL
-router.post('/generate/file', upload.single('file'), summarizeFromFile); // Summarize from file
 router.post('/generate', generateAISummary);        // Sync AI summary generation
 router.post('/queue', queueSummarization);          // Async job queue
 router.get('/job/:jobId', getJobStatus);            // Get job status

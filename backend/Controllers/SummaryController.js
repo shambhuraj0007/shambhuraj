@@ -2,7 +2,7 @@ const Summary = require('../Models/Summary');
 const aiService = require('../Services/aiService');
 const redisClient = require('../Services/redisClient');
 const queueService = require('../Services/queueService');
-const extractionService = require('../Services/extractionService');
+const extractionService = require('../Services/extractionService'); // Only for URL extraction
 
 // Generate AI Summary with comprehensive error handling
 const generateAISummary = async (req, res) => {
@@ -519,100 +519,6 @@ const summarizeFromURL = async (req, res) => {
   }
 };
 
-// Extract text from uploaded file and summarize
-const summarizeFromFile = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No file uploaded'
-      });
-    }
-
-    const { maxLength, style } = req.body;
-    const file = req.file;
-
-    console.log(`\n📁 File summarization request: ${file.originalname}`);
-
-    let extraction;
-    const fileExt = file.originalname.split('.').pop().toLowerCase();
-
-    // Extract text based on file type
-    switch (fileExt) {
-      case 'pdf':
-        extraction = await extractionService.extractTextFromPDF(file.buffer);
-        break;
-      case 'docx':
-      case 'doc':
-        extraction = await extractionService.extractTextFromDOCX(file.buffer);
-        break;
-      case 'txt':
-        extraction = await extractionService.extractTextFromTXT(file.buffer);
-        break;
-      default:
-        return res.status(400).json({
-          success: false,
-          message: 'Unsupported file type. Please upload PDF, DOCX, or TXT files.'
-        });
-    }
-
-    if (!extraction.success) {
-      return res.status(400).json({
-        success: false,
-        message: extraction.error
-      });
-    }
-
-    const text = extraction.text;
-    const wordCount = text.trim().split(/\s+/).length;
-
-    console.log(`   Extracted ${wordCount} words from ${fileExt.toUpperCase()}`);
-
-    if (wordCount < 50) {
-      return res.status(400).json({
-        success: false,
-        message: 'Extracted text is too short (minimum 50 words)'
-      });
-    }
-
-    // Generate summary using AI
-    const result = await aiService.generateSummary(text, {
-      maxLength: maxLength || 200,
-      style: style || 'concise'
-    });
-
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        message: result.error
-      });
-    }
-
-    console.log('✅ File summarization successful');
-
-    res.status(200).json({
-      success: true,
-      summary: result.summary,
-      statistics: {
-        originalWords: result.originalLength,
-        summaryWords: result.summaryLength,
-        compressionRatio: ((result.summaryLength / result.originalLength) * 100).toFixed(2)
-      },
-      fileName: file.originalname,
-      fileType: fileExt,
-      extractedText: text
-    });
-
-  } catch (error) {
-    console.error('❌ File summarization error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to summarize file content',
-      error: error.message
-    });
-  }
-};
-
 module.exports = {
   generateAISummary,
   createSummary,
@@ -624,6 +530,5 @@ module.exports = {
   queueSummarization,
   getJobStatus,
   getQueueStats,
-  summarizeFromURL,
-  summarizeFromFile
+  summarizeFromURL
 };
