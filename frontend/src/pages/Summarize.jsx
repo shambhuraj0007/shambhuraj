@@ -275,17 +275,6 @@ const Summarize = () => {
                   <LinkIcon className="w-5 h-5" />
                   URL
                 </button>
-                <button
-                  onClick={() => setActiveTab('file')}
-                  className={`flex items-center gap-2 px-4 py-3 font-semibold transition-all ${
-                    activeTab === 'file'
-                      ? 'text-indigo-600 border-b-2 border-indigo-600'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Upload className="w-5 h-5" />
-                  Upload
-                </button>
               </div>
 
               <div className="mb-4">
